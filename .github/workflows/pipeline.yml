@@ -24,7 +24,7 @@ jobs:
           echo "Risk: Potential bias." >> docs/model_card.txt
 
       - name: Upload Compliance Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: compliance-documents
           path: docs/
