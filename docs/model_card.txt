@@ -1,1 +1,24 @@
+Model Card
 
+Model Name: Applicant Scoring Model
+Model Type: Random Forest Classifier
+
+Purpose:
+This model is used to support HR in screening job applications.
+
+Input Data:
+- CV
+- Education
+- Work experience
+
+Output:
+Applicant score between 0 and 1 indicating suitability.
+
+Training Data:
+Synthetic HR dataset
+
+Risks:
+Potential bias in hiring decisions.
+
+Human Oversight:
+Final hiring decision is always made by a human recruiter.
