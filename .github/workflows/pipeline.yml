@@ -1,0 +1,30 @@
+name: AI Act Compliance Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  compliance-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Create documentation folder
+        run: mkdir -p docs
+
+      - name: Generate Model Card
+        run: |
+          echo "Model Card" > docs/model_card.txt
+          echo "Model Name: Applicant Scoring Model" >> docs/model_card.txt
+          echo "Purpose: AI supports HR screening." >> docs/model_card.txt
+          echo "Risk: Potential bias." >> docs/model_card.txt
+
+      - name: Upload Compliance Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-documents
+          path: docs/
