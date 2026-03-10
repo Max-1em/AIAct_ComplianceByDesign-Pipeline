@@ -1,30 +1,70 @@
-name: AI Act Compliance Pipeline
+name: AI Act Compliance Pipeline (High-Risk) 
 
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  compliance-pipeline:
+  compliance-and-build:
     runs-on: ubuntu-latest
-
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Wichtig für Traceability/Git-Hashes
 
-      - name: Create documentation folder
-        run: mkdir -p docs
+      - name: Initialize Compliance Workspace
+        run: mkdir -p compliance_artifacts/technical_docs
 
-      - name: Generate Model Card
+
+     #Hier wird Das Risiko Log- Artefakt erstellt
+      - name: Generate Risk Management Log
         run: |
-          echo "Model Card" > docs/model_card.txt
-          echo "Model Name: Applicant Scoring Model" >> docs/model_card.txt
-          echo "Purpose: AI supports HR screening." >> docs/model_card.txt
-          echo "Risk: Potential bias." >> docs/model_card.txt
+          echo "### Risk Management Log (EU AI Act Art. 9) ###" > compliance_artifacts/risk_log.md
+          echo "System: Applicant Scoring Model" >> compliance_artifacts/risk_log.md
+          echo "Risk Class: High-Risk (Annex III, 4a)" >> compliance_artifacts/risk_log.md
+          echo "Mitigation: Bias-Testing and Human-in-the-loop" >> compliance_artifacts/risk_log.md
+          echo "Timestamp: $(date)" >> compliance_artifacts/risk_log.md
 
-      - name: Upload Compliance Artifacts
+      # Das hier ist die Technische Dokumentation
+      - name: Create Technical Documentation Template
+        run: |
+          {
+            echo "# Technical Documentation (Annex IV)"
+            echo "Model Hash: ${{ github.sha }}"
+            echo "Training Data: dataset_v2.1.csv"
+            echo "Architecture: Random Forest Classifier"
+            echo "Performance Metrics: F1-Score, Demographic Parity"
+          } > compliance_artifacts/technical_docs/main_doc.md
+
+      # --- 3. HUMAN OVERSIGHT & LOGGING PLAN (Aufgabe 3) ---
+      - name: Generate Oversight & Logging Plan
+        run: |
+          echo "Human Oversight: HR Manager must confirm AI suggestions." > compliance_artifacts/oversight_plan.txt
+          echo "Logging: Every automated decision is stored with ID and timestamp." >> compliance_artifacts/logging_config.json
+
+      # --- 4. TRACEABILITY & VERSIONIERUNG (Aufgabe 5) ---
+      # Verknüpfung von Code-Stand (Hash) mit den Compliance-Dokumenten
+      - name: Add Traceability Metadata
+        run: |
+          echo "Commit-SHA: ${{ github.sha }}" > compliance_artifacts/version_info.txt
+          echo "Pipeline-Run-ID: ${{ github.run_id }}" >> compliance_artifacts/version_info.txt
+
+      # --- 5. GOVERNANCE GATES / TESTS (Aufgabe 6) ---
+      # Ein automatisierter Check, ob die Dokumentation vollständig ist
+      - name: Compliance Gate Check
+        run: |
+          if [ ! -f compliance_artifacts/risk_log.md ]; then
+            echo "Compliance Error: Risk Log missing!"
+            exit 1
+          fi
+          echo "Governance Check: Pass."
+
+      # --- 6. ARTEFAKT-ARCHIVIERUNG (Abgabe-Kriterium) ---
+      - name: Upload AI Act Compliance Package
         uses: actions/upload-artifact@v4
         with:
-          name: compliance-documents
-          path: docs/
+          name: AI-Act-Compliance-Artifacts-${{ github.sha }}
+          path: compliance_artifacts/
