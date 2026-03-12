@@ -6,771 +6,658 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ─────────────────────────────────────────────
+
+  # ──────────────────────────────────────────────────────────
   # STAGE 1 – Setup & Traceability
-  # ─────────────────────────────────────────────
-  stage1_traceability:
+  # Artefakt: VERSION_MANIFEST.json
+  # ──────────────────────────────────────────────────────────
+  stage1:
     name: "Stage 1 – Setup & Traceability"
     runs-on: ubuntu-latest
-    outputs:
-      build_id: ${{ steps.meta.outputs.build_id }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate VERSION_MANIFEST.json
-        id: meta
+      - name: Create VERSION_MANIFEST.json
         run: |
-          BUILD_ID="build-$(date +%Y%m%d%H%M%S)"
-          GIT_SHA="${{ github.sha }}"
-          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
-
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/VERSION_MANIFEST.json <<EOF
-          {
-            "build_id": "$BUILD_ID",
-            "git_sha": "$GIT_SHA",
-            "timestamp": "$TIMESTAMP",
-            "branch": "${{ github.ref_name }}",
+          echo '{
+            "build_id":     "build-${{ github.run_number }}",
+            "git_sha":      "${{ github.sha }}",
+            "timestamp":    "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'",
+            "branch":       "${{ github.ref_name }}",
             "triggered_by": "${{ github.actor }}"
-          }
-          EOF
+          }' > compliance_artifacts/VERSION_MANIFEST.json
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage1-version-manifest
-          path: compliance_artifacts/VERSION_MANIFEST.json
-
-  # ─────────────────────────────────────────────
-  # STAGE 2 – Risikoklasse & Technische Doku
-  # ─────────────────────────────────────────────
-  stage2_risk_classification:
-    name: "Stage 2 – Risikoklasse & Technische Doku"
-    runs-on: ubuntu-latest
-    needs: stage1_traceability
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: stage1-version-manifest
+          name: stage1
           path: compliance_artifacts/
 
-      - name: Generate risk_classification.md
+  # ──────────────────────────────────────────────────────────
+  # STAGE 2 – Risikoklasse & Technische Doku
+  # Artefakte: risk_classification.md, technical_documentation.md
+  # ──────────────────────────────────────────────────────────
+  stage2:
+    name: "Stage 2 – Risikoklasse & Technische Doku"
+    runs-on: ubuntu-latest
+    needs: stage1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create risk_classification.md
         run: |
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/risk_classification.md <<'EOF'
-          # Risk Classification
+          cat <<'EOF' > compliance_artifacts/risk_classification.md
+# Risk Classification
 
-          ## AI Act Risk Category
-          **High-Risk** (Annex III – Biometric / Employment / Education / Credit scoring)
+## AI Act Risk Category
+**High-Risk** (Annex III – Employment / Credit Scoring)
 
-          ## System Description
-          - **Model**: RandomForestClassifier (Applicant Scoring Model)
-          - **Use Case**: Automated applicant scoring
-          - **Data**: Iris dataset (proof-of-concept)
+## System Description
+- **Model**: RandomForestClassifier (Applicant Scoring Model)
+- **Use Case**: Automated applicant scoring
+- **Data**: Iris dataset (proof-of-concept)
 
-          ## Rationale
-          The system makes or supports consequential decisions affecting individuals.
-          It therefore falls under Article 6 and Annex III of the EU AI Act.
+## Rationale
+The system supports consequential decisions affecting individuals
+and falls under Article 6 and Annex III of the EU AI Act.
 
-          ## Applicable Requirements
-          - Risk Management (Art. 9)
-          - Data Governance (Art. 10)
-          - Transparency & Documentation (Art. 11–13)
-          - Human Oversight (Art. 14)
-          - Accuracy & Robustness (Art. 15)
-          EOF
+## Applicable Requirements
+- Risk Management (Art. 9)
+- Data Governance (Art. 10)
+- Transparency & Documentation (Art. 11-13)
+- Human Oversight (Art. 14)
+- Accuracy & Robustness (Art. 15)
+EOF
 
-      - name: Generate technical_documentation.md
+      - name: Create technical_documentation.md
         run: |
-          cat > compliance_artifacts/technical_documentation.md <<'EOF'
-          # Technical Documentation (Art. 11 EU AI Act)
+          cat <<'EOF' > compliance_artifacts/technical_documentation.md
+# Technical Documentation (Art. 11 EU AI Act)
 
-          ## Architecture
-          - **Algorithm**: RandomForestClassifier (scikit-learn)
-          - **Training Script**: train.py
-          - **Test Script**: test_model.py
-          - **Documentation Generator**: generate_docs.py
+## Architecture
+- **Algorithm**: RandomForestClassifier (scikit-learn)
+- **Training Script**: train.py
+- **Test Script**: test_model.py
+- **Documentation Generator**: generate_docs.py
 
-          ## Training Data
-          - Dataset: Iris (proof-of-concept placeholder)
-          - Features: 4 numeric features
-          - Target: 3 classes
+## Training Data
+- Dataset: Iris (proof-of-concept placeholder)
+- Features: 4 numeric features
+- Target: 3 classes
 
-          ## Performance Metrics
-          See model_card.md for detailed metrics.
+## Performance Metrics
+See model_card.md for detailed metrics.
 
-          ## Limitations
-          - Proof-of-concept only; not validated on production data.
-          - Fairness evaluation based on proxy attributes.
-          EOF
+## Limitations
+- Proof-of-concept only; not validated on production data.
+- Fairness evaluation based on proxy attributes.
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage2-risk-docs
-          path: |
-            compliance_artifacts/risk_classification.md
-            compliance_artifacts/technical_documentation.md
+          name: stage2
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 3 – Risk Management Log
-  # ─────────────────────────────────────────────
-  stage3_risk_management:
+  # Artefakt: risk_management_log.md
+  # ──────────────────────────────────────────────────────────
+  stage3:
     name: "Stage 3 – Risk Management Log"
     runs-on: ubuntu-latest
-    needs: stage2_risk_classification
+    needs: stage2
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate risk_management_log.md
+      - name: Create risk_management_log.md
         run: |
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/risk_management_log.md <<'EOF'
-          # Risk Management Log (Art. 9 EU AI Act)
+          cat <<'EOF' > compliance_artifacts/risk_management_log.md
+# Risk Management Log (Art. 9 EU AI Act)
 
-          | ID  | Risk Description                        | Likelihood | Impact | Mitigation                              | Status  |
-          |-----|-----------------------------------------|------------|--------|-----------------------------------------|---------|
-          | R01 | Biased training data                    | Medium     | High   | Bias & Fairness Check (Stage 3b)        | Open    |
-          | R02 | Model drift in production               | Medium     | High   | Logging & Monitoring (Stage 5)          | Open    |
-          | R03 | Lack of human oversight                 | Low        | High   | Human Oversight Plan (Stage 4)          | Open    |
-          | R04 | Data leakage / privacy violation        | Low        | High   | Data governance controls                | Open    |
-          | R05 | Insufficient explainability             | Medium     | Medium | Model Card documentation (Stage 6)      | Open    |
+| ID  | Risk Description            | Likelihood | Impact | Mitigation                       | Status |
+|-----|-----------------------------|------------|--------|----------------------------------|--------|
+| R01 | Biased training data        | Medium     | High   | Bias & Fairness Check (Stage 3b) | Open   |
+| R02 | Model drift in production   | Medium     | High   | Logging & Monitoring (Stage 5)   | Open   |
+| R03 | Lack of human oversight     | Low        | High   | Human Oversight Plan (Stage 4)   | Open   |
+| R04 | Data leakage / privacy      | Low        | High   | Data governance controls         | Open   |
+| R05 | Insufficient explainability | Medium     | Medium | Model Card (Stage 6)             | Open   |
 
-          _Generated automatically by CI pipeline._
-          EOF
+_Generated automatically by CI pipeline._
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage3-risk-management
-          path: compliance_artifacts/risk_management_log.md
+          name: stage3
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 3b – Bias & Fairness Check
-  # ─────────────────────────────────────────────
-  stage3b_bias_fairness:
+  # Artefakte: bias_report.json, bias_report.md  |  Exit 1 bei FAIL
+  # ──────────────────────────────────────────────────────────
+  stage3b:
     name: "Stage 3b – Bias & Fairness Check"
     runs-on: ubuntu-latest
-    needs: stage3_risk_management
+    needs: stage3
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install scikit-learn numpy joblib
+        run: pip install scikit-learn joblib
 
-      - name: Train model (using train.py)
+      - name: Train model
         run: |
           mkdir -p model compliance_artifacts
           python train.py
 
-      - name: Test model (using test_model.py)
-        run: python test_model.py
-
-      - name: Run bias & fairness check
-        id: bias_check
+      - name: Run bias check and write reports
         run: |
-          mkdir -p compliance_artifacts
-          python3 - <<'PYEOF'
+          python3 << 'PYEOF'
 import json, sys, os
 from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
 
 os.makedirs("compliance_artifacts", exist_ok=True)
 
-# Load the trained model from train.py
 model = joblib.load("model/model.pkl")
-
-iris = load_iris()
-X, y = iris.data, iris.target
+iris  = load_iris()
+X, y  = iris.data, iris.target
 _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-report = classification_report(y_test, model.predict(X_test), output_dict=True)
-
+report    = classification_report(y_test, model.predict(X_test), output_dict=True)
 f1_scores = [report[str(c)]["f1-score"] for c in range(3)]
-max_disparity = float(max(f1_scores) - min(f1_scores))
+disparity = round(float(max(f1_scores) - min(f1_scores)), 4)
 THRESHOLD = 0.10
-status = "PASS" if max_disparity < THRESHOLD else "FAIL"
+status    = "PASS" if disparity < THRESHOLD else "FAIL"
 
 result = {
-    "status": status,
-    "max_f1_disparity": round(max_disparity, 4),
-    "threshold": THRESHOLD,
-    "per_class_f1": {iris.target_names[i]: round(f1_scores[i], 4) for i in range(3)},
+    "status":           status,
+    "max_f1_disparity": disparity,
+    "threshold":        THRESHOLD,
+    "per_class_f1":     {iris.target_names[i]: round(f1_scores[i], 4) for i in range(3)},
     "overall_accuracy": round(report["accuracy"], 4)
 }
 
 with open("compliance_artifacts/bias_report.json", "w") as f:
     json.dump(result, f, indent=2)
 
-print(json.dumps(result, indent=2))
+rows = "".join(f"| {cls} | {val} |\n" for cls, val in result["per_class_f1"].items())
+md = f"""# Bias & Fairness Report
 
+**Status**: {status}
+**Max F1 Disparity**: {disparity} (Threshold: {THRESHOLD})
+**Overall Accuracy**: {result['overall_accuracy']}
+
+## Per-Class F1 Scores
+
+| Class | F1-Score |
+|-------|----------|
+{rows}"""
+
+with open("compliance_artifacts/bias_report.md", "w") as f:
+    f.write(md)
+
+print(json.dumps(result, indent=2))
 if status == "FAIL":
     print("::error::Bias check FAILED – F1 disparity exceeds threshold")
     sys.exit(1)
 PYEOF
 
-      - name: Generate bias_report.md
-        if: always()
-        run: |
-          mkdir -p compliance_artifacts
-          # Ensure fallback JSON exists if previous step failed
-          if [ ! -f compliance_artifacts/bias_report.json ]; then
-            echo '{"status":"ERROR","max_f1_disparity":"N/A","per_class_f1":{},"overall_accuracy":"N/A","threshold":0.10}' \
-              > compliance_artifacts/bias_report.json
-          fi
-          python3 - <<'PYEOF'
-import json, os
-
-with open("compliance_artifacts/bias_report.json") as f:
-    r = json.load(f)
-
-lines = [
-    "# Bias & Fairness Report",
-    "",
-    f"**Status**: {r['status']}  ",
-    f"**Max F1 Disparity**: {r['max_f1_disparity']} (Threshold: {r['threshold']})  ",
-    f"**Overall Accuracy**: {r['overall_accuracy']}",
-    "",
-    "## Per-Class F1 Scores",
-    "",
-    "| Class | F1-Score |",
-    "|-------|----------|",
-]
-for cls, val in r.get("per_class_f1", {}).items():
-    lines.append(f"| {cls} | {val} |")
-
-with open("compliance_artifacts/bias_report.md", "w") as f:
-    f.write("\n".join(lines))
-
-print("bias_report.md written successfully.")
-PYEOF
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stage3b-bias-fairness
-          path: |
-            compliance_artifacts/bias_report.json
-            compliance_artifacts/bias_report.md
+          name: stage3b
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 4 – Human Oversight Plan
-  # ─────────────────────────────────────────────
-  stage4_human_oversight:
+  # Artefakt: human_oversight_plan.md
+  # ──────────────────────────────────────────────────────────
+  stage4:
     name: "Stage 4 – Human Oversight Plan"
     runs-on: ubuntu-latest
-    needs: stage3b_bias_fairness
+    needs: stage3b
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate human_oversight_plan.md
+      - name: Create human_oversight_plan.md
         run: |
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/human_oversight_plan.md <<'EOF'
-          # Human Oversight Plan (Art. 14 EU AI Act)
+          cat <<'EOF' > compliance_artifacts/human_oversight_plan.md
+# Human Oversight Plan (Art. 14 EU AI Act)
 
-          ## Objective
-          Ensure that natural persons can effectively oversee the AI system.
+## Oversight Mechanisms
 
-          ## Oversight Mechanisms
-          | Mechanism                    | Responsible Role         | Frequency   |
-          |------------------------------|--------------------------|-------------|
-          | Model output review          | Data Scientist           | Weekly      |
-          | Drift / anomaly alerts       | MLOps Engineer           | Continuous  |
-          | Override capability          | Domain Expert            | On demand   |
-          | Compliance audit             | AI Compliance Officer    | Quarterly   |
-          | Incident escalation          | CISO / DPO               | On incident |
+| Mechanism              | Responsible Role      | Frequency   |
+|------------------------|-----------------------|-------------|
+| Model output review    | Data Scientist        | Weekly      |
+| Drift / anomaly alerts | MLOps Engineer        | Continuous  |
+| Override capability    | Domain Expert         | On demand   |
+| Compliance audit       | AI Compliance Officer | Quarterly   |
+| Incident escalation    | CISO / DPO            | On incident |
 
-          ## Override Procedure
-          1. Reviewer flags suspicious output via internal ticketing system.
-          2. Model inference is paused for affected batch.
-          3. Root-cause analysis completed within 48 h.
-          4. Re-deployment only after sign-off by AI Compliance Officer.
+## Override Procedure
+1. Reviewer flags suspicious output via ticketing system.
+2. Model inference is paused for affected batch.
+3. Root-cause analysis completed within 48 h.
+4. Re-deployment only after sign-off by AI Compliance Officer.
 
-          _Generated automatically by CI pipeline._
-          EOF
+_Generated automatically by CI pipeline._
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage4-human-oversight
-          path: compliance_artifacts/human_oversight_plan.md
+          name: stage4
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
-  # STAGE 5 – Logging & Monitoring Concept
-  # ─────────────────────────────────────────────
-  stage5_logging_monitoring:
+  # ──────────────────────────────────────────────────────────
+  # STAGE 5 – Logging & Monitoring
+  # Artefakt: logging_monitoring_concept.md
+  # ──────────────────────────────────────────────────────────
+  stage5:
     name: "Stage 5 – Logging & Monitoring"
     runs-on: ubuntu-latest
-    needs: stage4_human_oversight
+    needs: stage4
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate logging_monitoring_concept.md
+      - name: Create logging_monitoring_concept.md
         run: |
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/logging_monitoring_concept.md <<'EOF'
-          # Logging & Monitoring Concept (Art. 12 EU AI Act)
+          cat <<'EOF' > compliance_artifacts/logging_monitoring_concept.md
+# Logging & Monitoring Concept (Art. 12 EU AI Act)
 
-          ## Log Retention
-          - Minimum retention: **10 years** (High-Risk, Art. 12 §1)
-          - Storage: Immutable object storage (e.g., S3 with Object Lock)
+## Log Retention
+- Minimum retention: **10 years** (High-Risk, Art. 12 §1)
+- Storage: Immutable object storage (e.g. S3 with Object Lock)
 
-          ## Logged Events
-          | Event                     | Log Level | Retention |
-          |---------------------------|-----------|-----------|
-          | Model inference request   | INFO      | 10 years  |
-          | Prediction output         | INFO      | 10 years  |
-          | Human override triggered  | WARNING   | 10 years  |
-          | Model retrain event       | INFO      | 10 years  |
-          | Bias threshold exceeded   | ERROR     | 10 years  |
-          | Incident declared         | CRITICAL  | 10 years  |
+## Logged Events
 
-          ## Monitoring KPIs
-          - Prediction confidence distribution (alert if mean < 0.75)
-          - Feature drift score (alert if PSI > 0.2)
-          - Per-class accuracy (alert if Δ > 5 pp vs. baseline)
+| Event                   | Log Level | Retention |
+|-------------------------|-----------|-----------|
+| Model inference request | INFO      | 10 years  |
+| Prediction output       | INFO      | 10 years  |
+| Human override          | WARNING   | 10 years  |
+| Model retrain event     | INFO      | 10 years  |
+| Bias threshold exceeded | ERROR     | 10 years  |
+| Incident declared       | CRITICAL  | 10 years  |
 
-          ## Tooling (Reference)
-          - Log aggregation: ELK Stack / CloudWatch
-          - Drift detection: Evidently AI / WhyLabs
-          - Dashboards: Grafana
+## Monitoring KPIs
+- Prediction confidence distribution (alert if mean < 0.75)
+- Feature drift score (alert if PSI > 0.2)
+- Per-class accuracy (alert if delta > 5 pp vs. baseline)
 
-          _Generated automatically by CI pipeline._
-          EOF
+_Generated automatically by CI pipeline._
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage5-logging-monitoring
-          path: compliance_artifacts/logging_monitoring_concept.md
+          name: stage5
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 6 – Model Card & Dataset Card
-  # ─────────────────────────────────────────────
-  stage6_model_card:
+  # Artefakte: model_card.md, dataset_card.md
+  # ──────────────────────────────────────────────────────────
+  stage6:
     name: "Stage 6 – Model Card & Dataset Card"
     runs-on: ubuntu-latest
-    needs: stage5_logging_monitoring
+    needs: stage5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install scikit-learn numpy joblib
+        run: pip install scikit-learn joblib
 
-      - name: Train model (using train.py)
+      - name: Train model and generate model_card.md
         run: |
           mkdir -p model compliance_artifacts
           python train.py
-
-      - name: Generate metrics from trained model
-        run: |
-          mkdir -p compliance_artifacts
-          python3 - <<'PYEOF'
-import json, os
+          python3 << 'PYEOF'
+import json
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 import joblib
 
-model = joblib.load("model/model.pkl")
-iris = load_iris()
-X, y = iris.data, iris.target
+model  = joblib.load("model/model.pkl")
+iris   = load_iris()
+X, y   = iris.data, iris.target
 _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 y_pred = model.predict(X_test)
 
-report = classification_report(y_test, y_pred, target_names=iris.target_names, output_dict=True)
+report      = classification_report(y_test, y_pred, target_names=iris.target_names, output_dict=True)
 importances = dict(zip(iris.feature_names, [round(float(v), 4) for v in model.feature_importances_]))
+accuracy    = round(accuracy_score(y_test, y_pred), 4)
 
-metrics = {
-    "accuracy": round(accuracy_score(y_test, y_pred), 4),
-    "n_estimators": model.n_estimators,
-    "feature_importances": importances,
-    "classification_report": report
-}
-with open("compliance_artifacts/metrics.json", "w") as f:
-    json.dump(metrics, f, indent=2)
-print("Metrics written:", metrics["accuracy"])
-PYEOF
+perf_rows = "".join(
+    f"| {cls} | {round(report[cls].get('precision',0),4)} | {round(report[cls].get('recall',0),4)} | {round(report[cls].get('f1-score',0),4)} |\n"
+    for cls in iris.target_names
+)
+feat_rows = "".join(f"| {feat} | {val} |\n" for feat, val in importances.items())
 
-      - name: Generate model_card.md
-        run: |
-          python3 - <<'PYEOF'
-import json
-with open("compliance_artifacts/metrics.json") as f:
-    m = json.load(f)
-cr = m["classification_report"]
-fi = m["feature_importances"]
+md = f"""# Model Card - Applicant Scoring Model
 
-lines = [
-    "# Model Card - Applicant Scoring Model",
-    "",
-    "## Model Details",
-    "- **Algorithm**: RandomForestClassifier (scikit-learn)",
-    f"- **Estimators**: {m['n_estimators']}",
-    "- **Version**: See VERSION_MANIFEST.json",
-    "",
-    "## Intended Use",
-    "Proof-of-concept applicant scoring. Not for production use without further validation.",
-    "",
-    "## Performance",
-    f"- **Overall Accuracy**: {m['accuracy']}",
-    "",
-    "| Class | Precision | Recall | F1 |",
-    "|-------|-----------|--------|----|",
-]
-for cls in ["setosa", "versicolor", "virginica"]:
-    r = cr.get(cls, {})
-    lines.append(f"| {cls} | {round(r.get('precision',0),4)} | {round(r.get('recall',0),4)} | {round(r.get('f1-score',0),4)} |")
+## Model Details
+- **Algorithm**: RandomForestClassifier (scikit-learn)
+- **Estimators**: {model.n_estimators}
+- **Version**: See VERSION_MANIFEST.json
 
-lines += [
-    "",
-    "## Feature Importances",
-    "| Feature | Importance |",
-    "|---------|------------|",
-]
-for feat, val in fi.items():
-    lines.append(f"| {feat} | {val} |")
+## Intended Use
+Proof-of-concept applicant scoring. Not for production use without further validation.
 
-lines += [
-    "",
-    "## Limitations & Risks",
-    "- Trained on Iris dataset (synthetic proxy for applicant data).",
-    "- Fairness evaluation limited to class-level metrics.",
-    "",
-    "_Generated automatically by CI pipeline._"
-]
+## Performance
+- **Overall Accuracy**: {accuracy}
+
+| Class | Precision | Recall | F1 |
+|-------|-----------|--------|----|
+{perf_rows}
+## Feature Importances
+
+| Feature | Importance |
+|---------|------------|
+{feat_rows}
+## Limitations
+- Trained on Iris dataset (proxy data only).
+- Fairness evaluation limited to class-level metrics.
+
+_Generated automatically by CI pipeline._
+"""
 
 with open("compliance_artifacts/model_card.md", "w") as f:
-    f.write("\n".join(lines))
-print("model_card.md written.")
+    f.write(md)
+print("model_card.md written – accuracy:", accuracy)
 PYEOF
 
-      - name: Generate dataset_card.md
+      - name: Create dataset_card.md
         run: |
-          cat > compliance_artifacts/dataset_card.md <<'EOF'
-          # Dataset Card – Iris (Proof-of-Concept)
+          cat <<'EOF' > compliance_artifacts/dataset_card.md
+# Dataset Card - Iris (Proof-of-Concept)
 
-          ## Dataset Overview
-          - **Name**: Iris Dataset
-          - **Source**: scikit-learn built-in (`sklearn.datasets.load_iris`)
-          - **Samples**: 150
-          - **Features**: 4 numeric (sepal/petal length & width)
-          - **Classes**: 3 (setosa, versicolor, virginica)
+## Dataset Overview
+- **Name**: Iris Dataset
+- **Source**: scikit-learn built-in (sklearn.datasets.load_iris)
+- **Samples**: 150
+- **Features**: 4 numeric (sepal/petal length & width)
+- **Classes**: 3 (setosa, versicolor, virginica)
 
-          ## Data Governance (Art. 10 EU AI Act)
-          | Criterion         | Status        |
-          |-------------------|---------------|
-          | Personal Data     | No            |
-          | Consent Obtained  | N/A           |
-          | Bias Assessment   | See Stage 3b  |
-          | Data Provenance   | Public domain |
-          | Retention Policy  | N/A (static)  |
+## Data Governance (Art. 10 EU AI Act)
 
-          ## Known Limitations
-          - Iris is a proxy dataset; real applicant data must be validated separately.
+| Criterion        | Status        |
+|------------------|---------------|
+| Personal Data    | No            |
+| Consent Obtained | N/A           |
+| Bias Assessment  | See Stage 3b  |
+| Data Provenance  | Public domain |
+| Retention Policy | N/A (static)  |
 
-          _Generated automatically by CI pipeline._
-          EOF
+_Generated automatically by CI pipeline._
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage6-model-dataset-card
-          path: |
-            compliance_artifacts/model_card.md
-            compliance_artifacts/dataset_card.md
-            compliance_artifacts/metrics.json
+          name: stage6
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 7 – Governance & Incident Response
-  # ─────────────────────────────────────────────
-  stage7_governance:
+  # Artefakte: governance_gates.md, incident_response_plan.md
+  # ──────────────────────────────────────────────────────────
+  stage7:
     name: "Stage 7 – Governance & Incident Response"
     runs-on: ubuntu-latest
-    needs: stage6_model_card
+    needs: stage6
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate governance_gates.md
+      - name: Create governance_gates.md
         run: |
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/governance_gates.md <<'EOF'
-          # Governance Gates
+          cat <<'EOF' > compliance_artifacts/governance_gates.md
+# Governance Gates
 
-          | Gate | Condition                              | Required Approver         | Status  |
-          |------|----------------------------------------|---------------------------|---------|
-          | G1   | Bias check PASS (Stage 3b)             | AI Compliance Officer     | Pending |
-          | G2   | Risk Management Log reviewed           | Risk Manager              | Pending |
-          | G3   | Human Oversight Plan signed off        | CISO                      | Pending |
-          | G4   | Model Card published                   | Data Scientist            | Pending |
-          | G5   | Legal review completed                 | DPO / Legal Counsel       | Pending |
-          | G6   | Deployment approval                    | Product Owner + Compliance| Pending |
+| Gate | Condition                       | Required Approver          | Status  |
+|------|---------------------------------|----------------------------|---------|
+| G1   | Bias check PASS (Stage 3b)      | AI Compliance Officer      | Pending |
+| G2   | Risk Management Log reviewed    | Risk Manager               | Pending |
+| G3   | Human Oversight Plan signed off | CISO                       | Pending |
+| G4   | Model Card published            | Data Scientist             | Pending |
+| G5   | Legal review completed          | DPO / Legal Counsel        | Pending |
+| G6   | Deployment approval             | Product Owner + Compliance | Pending |
 
-          _Generated automatically by CI pipeline. Gates must be closed manually before production deployment._
-          EOF
+_Gates must be closed manually before production deployment._
+EOF
 
-      - name: Generate incident_response_plan.md
+      - name: Create incident_response_plan.md
         run: |
-          cat > compliance_artifacts/incident_response_plan.md <<'EOF'
-          # Incident Response Plan (Art. 62 EU AI Act)
+          cat <<'EOF' > compliance_artifacts/incident_response_plan.md
+# Incident Response Plan (Art. 62 EU AI Act)
 
-          ## Scope
-          Applies to any serious incident or malfunctioning of the AI system.
+## Severity Levels
 
-          ## Severity Levels
-          | Level    | Definition                                   | Response Time |
-          |----------|----------------------------------------------|---------------|
-          | P1 – Critical | Harm to individuals confirmed           | 1 h           |
-          | P2 – High     | Risk of harm, system behaving unexpectedly | 4 h        |
-          | P3 – Medium   | Anomaly detected, no harm yet           | 24 h          |
-          | P4 – Low      | Minor drift / documentation gap         | 72 h          |
+| Level       | Definition                               | Response Time |
+|-------------|------------------------------------------|---------------|
+| P1 Critical | Harm to individuals confirmed            | 1 h           |
+| P2 High     | Risk of harm, unexpected system behavior | 4 h           |
+| P3 Medium   | Anomaly detected, no harm yet            | 24 h          |
+| P4 Low      | Minor drift / documentation gap          | 72 h          |
 
-          ## Response Procedure
-          1. **Detect** – Monitoring alert or user report received.
-          2. **Contain** – Model inference suspended if P1/P2.
-          3. **Assess** – Root-cause analysis by Data Scientist + Compliance Officer.
-          4. **Notify** – Market surveillance authority notified within 15 days (Art. 62 §1).
-          5. **Remediate** – Fix applied, re-validation pipeline triggered.
-          6. **Document** – Incident logged in risk_management_log.md.
+## Response Procedure
+1. **Detect** - Monitoring alert or user report received.
+2. **Contain** - Model inference suspended if P1/P2.
+3. **Assess** - Root-cause analysis by Data Scientist + Compliance Officer.
+4. **Notify** - Market surveillance authority notified within 15 days (Art. 62 §1).
+5. **Remediate** - Fix applied, re-validation pipeline triggered.
+6. **Document** - Incident logged in risk_management_log.md.
 
-          _Generated automatically by CI pipeline._
-          EOF
+_Generated automatically by CI pipeline._
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage7-governance-incident
-          path: |
-            compliance_artifacts/governance_gates.md
-            compliance_artifacts/incident_response_plan.md
+          name: stage7
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 8 – Rollen & Pflichten
-  # ─────────────────────────────────────────────
-  stage8_roles:
+  # Artefakt: roles_responsibilities.md
+  # ──────────────────────────────────────────────────────────
+  stage8:
     name: "Stage 8 – Rollen & Pflichten"
     runs-on: ubuntu-latest
-    needs: stage7_governance
+    needs: stage7
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate roles_responsibilities.md
+      - name: Create roles_responsibilities.md
         run: |
           mkdir -p compliance_artifacts
-          cat > compliance_artifacts/roles_responsibilities.md <<'EOF'
-          # Roles & Responsibilities (Art. 16 & 26 EU AI Act)
+          cat <<'EOF' > compliance_artifacts/roles_responsibilities.md
+# Roles & Responsibilities (Art. 16 & 26 EU AI Act)
 
-          | Role                   | Responsibility                                                         |
-          |------------------------|------------------------------------------------------------------------|
-          | Provider               | Ensures AI Act compliance; maintains technical documentation           |
-          | AI Compliance Officer  | Oversees compliance pipeline; signs off governance gates               |
-          | Data Scientist         | Trains, evaluates, and documents the model                             |
-          | MLOps Engineer         | Operates monitoring, logging, and retraining pipelines                 |
-          | DPO                    | Data protection oversight; DPIA if personal data is involved           |
-          | CISO                   | Security review; incident escalation                                   |
-          | Deployer               | Ensures appropriate use; implements human oversight in their context   |
-          | Risk Manager           | Maintains and reviews risk management log                              |
+| Role                  | Responsibility                                               |
+|-----------------------|--------------------------------------------------------------|
+| Provider              | Ensures AI Act compliance; maintains technical documentation |
+| AI Compliance Officer | Oversees compliance pipeline; signs off governance gates     |
+| Data Scientist        | Trains, evaluates, and documents the model                   |
+| MLOps Engineer        | Operates monitoring, logging, and retraining pipelines       |
+| DPO                   | Data protection oversight; DPIA if personal data involved    |
+| CISO                  | Security review; incident escalation                         |
+| Deployer              | Ensures appropriate use; implements human oversight          |
+| Risk Manager          | Maintains and reviews risk management log                    |
 
-          _Generated automatically by CI pipeline._
-          EOF
+_Generated automatically by CI pipeline._
+EOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage8-roles
-          path: compliance_artifacts/roles_responsibilities.md
+          name: stage8
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 9 – Integrity Hashes
-  # ─────────────────────────────────────────────
-  stage9_integrity:
+  # Artefakte: INTEGRITY_MANIFEST.md + INTEGRITY_MANIFEST.json
+  # ──────────────────────────────────────────────────────────
+  stage9:
     name: "Stage 9 – Integrity Hashes"
     runs-on: ubuntu-latest
-    needs:
-      - stage1_traceability
-      - stage2_risk_classification
-      - stage3_risk_management
-      - stage3b_bias_fairness
-      - stage4_human_oversight
-      - stage5_logging_monitoring
-      - stage6_model_card
-      - stage7_governance
-      - stage8_roles
+    needs: [stage1, stage2, stage3, stage3b, stage4, stage5, stage6, stage7, stage8]
     steps:
       - uses: actions/checkout@v4
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: all_artifacts/
+          path: downloaded/
 
-      - name: Flatten artifacts into one folder
+      - name: Flatten into compliance_artifacts/
         run: |
           mkdir -p compliance_artifacts
-          find all_artifacts/ -type f -not -name "*.DS_Store" | while IFS= read -r f; do
-            fname="$(basename "$f")"
-            dest="compliance_artifacts/$fname"
-            cp "$f" "$dest"
-            echo "Copied: $fname"
+          find downloaded/ -type f | while IFS= read -r f; do
+            cp "$f" "compliance_artifacts/$(basename "$f")"
           done
-          echo "--- Files in compliance_artifacts ---"
-          ls -1 compliance_artifacts/
+          echo "Files collected:"
+          ls compliance_artifacts/
 
-      - name: Generate INTEGRITY_MANIFEST
+      - name: Generate integrity hashes
         run: |
-          python3 - <<'PYEOF'
-          import hashlib, json, os, datetime
+          python3 << 'PYEOF'
+import hashlib, json, os, datetime
 
-          artifact_dir = "compliance_artifacts"
-          manifest = {
-              "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
-              "algorithm": "sha256",
-              "files": {}
-          }
+folder   = "compliance_artifacts"
+manifest = {
+    "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+    "algorithm":    "sha256",
+    "files":        {}
+}
+md = "# Integrity Manifest (SHA-256)\n\n| File | SHA-256 |\n|------|---------|\n"
 
-          md_lines = ["# Integrity Manifest (SHA-256)\n",
-                      f"Generated: {manifest['generated_at']}\n",
-                      "| File | SHA-256 |",
-                      "|------|---------|"]
+for fname in sorted(os.listdir(folder)):
+    fpath = os.path.join(folder, fname)
+    if os.path.isfile(fpath):
+        h = hashlib.sha256(open(fpath, "rb").read()).hexdigest()
+        manifest["files"][fname] = h
+        md += f"| {fname} | `{h}` |\n"
 
-          for fname in sorted(os.listdir(artifact_dir)):
-              fpath = os.path.join(artifact_dir, fname)
-              if os.path.isfile(fpath) and fname != "INTEGRITY_MANIFEST.md":
-                  h = hashlib.sha256(open(fpath,"rb").read()).hexdigest()
-                  manifest["files"][fname] = h
-                  md_lines.append(f"| {fname} | `{h}` |")
+with open(f"{folder}/INTEGRITY_MANIFEST.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+with open(f"{folder}/INTEGRITY_MANIFEST.md", "w") as f:
+    f.write(md)
 
-          with open("compliance_artifacts/INTEGRITY_MANIFEST.json","w") as f:
-              json.dump(manifest, f, indent=2)
-
-          with open("compliance_artifacts/INTEGRITY_MANIFEST.md","w") as f:
-              f.write("\n".join(md_lines))
-
-          print(f"Hashed {len(manifest['files'])} files.")
-          PYEOF
+print(f"Hashed {len(manifest['files'])} files.")
+PYEOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage9-integrity
-          path: |
-            compliance_artifacts/INTEGRITY_MANIFEST.json
-            compliance_artifacts/INTEGRITY_MANIFEST.md
+          name: stage9
+          path: compliance_artifacts/
 
-  # ─────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────
   # STAGE 10 – Compliance Summary
-  # ─────────────────────────────────────────────
-  stage10_compliance_summary:
+  # Artefakt: COMPLIANCE_SUMMARY.md
+  # ──────────────────────────────────────────────────────────
+  stage10:
     name: "Stage 10 – Compliance Summary"
     runs-on: ubuntu-latest
-    needs: stage9_integrity
+    needs: stage9
     steps:
       - uses: actions/checkout@v4
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: all_artifacts/
+          path: downloaded/
 
-      - name: Flatten artifacts
+      - name: Flatten into compliance_artifacts/
         run: |
           mkdir -p compliance_artifacts
-          find all_artifacts/ -type f -not -name "*.DS_Store" | while IFS= read -r f; do
-            fname="$(basename "$f")"
-            cp "$f" "compliance_artifacts/$fname"
-            echo "Copied: $fname"
+          find downloaded/ -type f | while IFS= read -r f; do
+            cp "$f" "compliance_artifacts/$(basename "$f")"
           done
-          echo "--- Files in compliance_artifacts ---"
-          ls -1 compliance_artifacts/
 
       - name: Generate COMPLIANCE_SUMMARY.md
         run: |
-          python3 - <<'PYEOF'
-          import os, json, datetime
+          python3 << 'PYEOF'
+import os, json, datetime
 
-          artifact_dir = "compliance_artifacts"
-          expected = [
-              ("VERSION_MANIFEST.json",         "Stage 1",  "Setup & Traceability"),
-              ("risk_classification.md",         "Stage 2",  "Risk Classification"),
-              ("technical_documentation.md",     "Stage 2",  "Technical Documentation"),
-              ("risk_management_log.md",         "Stage 3",  "Risk Management Log"),
-              ("bias_report.json",               "Stage 3b", "Bias & Fairness Check"),
-              ("bias_report.md",                 "Stage 3b", "Bias & Fairness Report"),
-              ("human_oversight_plan.md",        "Stage 4",  "Human Oversight Plan"),
-              ("logging_monitoring_concept.md",  "Stage 5",  "Logging & Monitoring"),
-              ("model_card.md",                  "Stage 6",  "Model Card"),
-              ("dataset_card.md",                "Stage 6",  "Dataset Card"),
-              ("governance_gates.md",            "Stage 7",  "Governance Gates"),
-              ("incident_response_plan.md",      "Stage 7",  "Incident Response Plan"),
-              ("roles_responsibilities.md",      "Stage 8",  "Roles & Responsibilities"),
-              ("INTEGRITY_MANIFEST.json",        "Stage 9",  "Integrity Hashes (JSON)"),
-              ("INTEGRITY_MANIFEST.md",          "Stage 9",  "Integrity Hashes (MD)"),
-          ]
+folder = "compliance_artifacts"
 
-          # Read bias status
-          bias_status = "UNKNOWN"
-          bp = os.path.join(artifact_dir, "bias_report.json")
-          if os.path.exists(bp):
-              try:
-                  bias_status = json.load(open(bp)).get("status","UNKNOWN")
-              except Exception:
-                  pass
+expected = [
+    ("VERSION_MANIFEST.json",        "Stage 1",  "Setup & Traceability"),
+    ("risk_classification.md",        "Stage 2",  "Risk Classification"),
+    ("technical_documentation.md",    "Stage 2",  "Technical Documentation"),
+    ("risk_management_log.md",        "Stage 3",  "Risk Management Log"),
+    ("bias_report.json",              "Stage 3b", "Bias & Fairness (JSON)"),
+    ("bias_report.md",                "Stage 3b", "Bias & Fairness (MD)"),
+    ("human_oversight_plan.md",       "Stage 4",  "Human Oversight Plan"),
+    ("logging_monitoring_concept.md", "Stage 5",  "Logging & Monitoring"),
+    ("model_card.md",                 "Stage 6",  "Model Card"),
+    ("dataset_card.md",               "Stage 6",  "Dataset Card"),
+    ("governance_gates.md",           "Stage 7",  "Governance Gates"),
+    ("incident_response_plan.md",     "Stage 7",  "Incident Response Plan"),
+    ("roles_responsibilities.md",     "Stage 8",  "Roles & Responsibilities"),
+    ("INTEGRITY_MANIFEST.json",       "Stage 9",  "Integrity Hashes (JSON)"),
+    ("INTEGRITY_MANIFEST.md",         "Stage 9",  "Integrity Hashes (MD)"),
+]
 
-          open_gates = [f"G{i}" for i in range(1,7)]  # all gates open by default
+bias_status = "UNKNOWN"
+bp = os.path.join(folder, "bias_report.json")
+if os.path.exists(bp):
+    bias_status = json.load(open(bp)).get("status", "UNKNOWN")
 
-          lines = [
-              "# Compliance Summary",
-              f"\n**Generated**: {datetime.datetime.utcnow().isoformat()}Z  ",
-              "**Pipeline**: AI Act Compliance-by-Design (High-Risk)\n",
-              "## Artifact Status\n",
-              "| Stage | Description | Artifact | Present |",
-              "|-------|-------------|----------|---------|",
-          ]
+rows        = ""
+all_present = True
+for fname, stage, desc in expected:
+    ok = os.path.exists(os.path.join(folder, fname))
+    if not ok:
+        all_present = False
+    rows += f"| {stage} | {desc} | `{fname}` | {'OK' if ok else 'MISSING'} |\n"
 
-          all_present = True
-          for fname, stage, desc in expected:
-              present = os.path.exists(os.path.join(artifact_dir, fname))
-              if not present:
-                  all_present = False
-              icon = "✅" if present else "❌"
-              lines.append(f"| {stage} | {desc} | `{fname}` | {icon} |")
+gates   = "\n".join(f"- [ ] G{i} – requires manual sign-off" for i in range(1, 7))
+overall = "COMPLETE" if all_present and bias_status == "PASS" else "INCOMPLETE – check above"
 
-          lines += [
-              "\n## Bias & Fairness",
-              f"- **Status**: {bias_status} {'✅' if bias_status=='PASS' else '⚠️'}",
-              "\n## Open Governance Gates",
-          ]
-          if open_gates:
-              for g in open_gates:
-                  lines.append(f"- [ ] {g} – requires manual sign-off (see governance_gates.md)")
-          else:
-              lines.append("- All gates closed ✅")
+md = f"""# Compliance Summary
 
-          overall = "✅ COMPLETE" if all_present and bias_status == "PASS" else "⚠️ INCOMPLETE – see above"
-          lines += [
-              "\n## Overall Compliance Status",
-              f"**{overall}**",
-              "\n_Generated automatically by CI pipeline._"
-          ]
+**Generated**: {datetime.datetime.utcnow().isoformat()}Z
+**Pipeline**: AI Act Compliance-by-Design (High-Risk)
 
-          with open("compliance_artifacts/COMPLIANCE_SUMMARY.md","w") as f:
-              f.write("\n".join(lines))
+## Artifact Status
 
-          print("Compliance summary generated.")
-          PYEOF
+| Stage | Description | Artifact | Status |
+|-------|-------------|----------|--------|
+{rows}
+## Bias & Fairness
+- **Status**: {bias_status}
+
+## Open Governance Gates
+{gates}
+
+## Overall Compliance Status
+**{overall}**
+
+_Generated automatically by CI pipeline._
+"""
+
+with open(f"{folder}/COMPLIANCE_SUMMARY.md", "w") as f:
+    f.write(md)
+print("Done:", overall)
+PYEOF
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stage10-compliance-summary
-          path: compliance_artifacts/COMPLIANCE_SUMMARY.md
+          name: stage10
+          path: compliance_artifacts/
 
-      - name: Print summary to job log
+      - name: Print summary
         run: cat compliance_artifacts/COMPLIANCE_SUMMARY.md
