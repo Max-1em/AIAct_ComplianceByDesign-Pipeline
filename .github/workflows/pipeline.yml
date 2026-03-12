@@ -161,93 +161,97 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install scikit-learn numpy
+        run: pip install scikit-learn numpy joblib
+
+      - name: Train model (using train.py)
+        run: |
+          mkdir -p model compliance_artifacts
+          python train.py
+
+      - name: Test model (using test_model.py)
+        run: python test_model.py
 
       - name: Run bias & fairness check
         id: bias_check
         run: |
-          python - <<'PYEOF'
-          import json, sys
-          from sklearn.datasets import load_iris
-          from sklearn.ensemble import RandomForestClassifier
-          from sklearn.model_selection import train_test_split
-          from sklearn.metrics import classification_report
-          import numpy as np
+          mkdir -p compliance_artifacts
+          python3 - <<'PYEOF'
+import json, sys, os
+from sklearn.datasets import load_iris
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+import joblib
 
-          iris = load_iris()
-          X, y = iris.data, iris.target
-          X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
+os.makedirs("compliance_artifacts", exist_ok=True)
 
-          model = RandomForestClassifier(random_state=42)
-          model.fit(X_train, y_train)
+# Load the trained model from train.py
+model = joblib.load("model/model.pkl")
 
-          report = classification_report(y_test, model.predict(X_test), output_dict=True)
+iris = load_iris()
+X, y = iris.data, iris.target
+_, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-          # Simple fairness proxy: per-class F1 spread
-          f1_scores = [report[str(c)]["f1-score"] for c in range(3)]
-          max_disparity = float(max(f1_scores) - min(f1_scores))
-          THRESHOLD = 0.10
-          status = "PASS" if max_disparity < THRESHOLD else "FAIL"
+report = classification_report(y_test, model.predict(X_test), output_dict=True)
 
-          result = {
-              "status": status,
-              "max_f1_disparity": round(max_disparity, 4),
-              "threshold": THRESHOLD,
-              "per_class_f1": {iris.target_names[i]: round(f1_scores[i], 4) for i in range(3)},
-              "overall_accuracy": round(report["accuracy"], 4)
-          }
+f1_scores = [report[str(c)]["f1-score"] for c in range(3)]
+max_disparity = float(max(f1_scores) - min(f1_scores))
+THRESHOLD = 0.10
+status = "PASS" if max_disparity < THRESHOLD else "FAIL"
 
-          with open("compliance_artifacts/bias_report.json", "w") as f:
-              json.dump(result, f, indent=2)
+result = {
+    "status": status,
+    "max_f1_disparity": round(max_disparity, 4),
+    "threshold": THRESHOLD,
+    "per_class_f1": {iris.target_names[i]: round(f1_scores[i], 4) for i in range(3)},
+    "overall_accuracy": round(report["accuracy"], 4)
+}
 
-          print(json.dumps(result, indent=2))
+with open("compliance_artifacts/bias_report.json", "w") as f:
+    json.dump(result, f, indent=2)
 
-          if status == "FAIL":
-              print("::error::Bias check FAILED – F1 disparity exceeds threshold")
-              sys.exit(1)
-          PYEOF
-        shell: bash
+print(json.dumps(result, indent=2))
+
+if status == "FAIL":
+    print("::error::Bias check FAILED – F1 disparity exceeds threshold")
+    sys.exit(1)
+PYEOF
 
       - name: Generate bias_report.md
         if: always()
         run: |
           mkdir -p compliance_artifacts
-          python - <<'PYEOF'
-          import json, os
-          try:
-              with open("compliance_artifacts/bias_report.json") as f:
-                  r = json.load(f)
-          except FileNotFoundError:
-              r = {"status": "ERROR", "max_f1_disparity": "N/A", "per_class_f1": {}, "overall_accuracy": "N/A", "threshold": 0.10}
-
-          lines = [
-              "# Bias & Fairness Report",
-              f"\n**Status**: {r['status']}  ",
-              f"**Max F1 Disparity**: {r['max_f1_disparity']} (Threshold: {r['threshold']})  ",
-              f"**Overall Accuracy**: {r['overall_accuracy']}\n",
-              "## Per-Class F1 Scores\n",
-              "| Class | F1-Score |",
-              "|-------|----------|",
-          ]
-          for cls, val in r.get("per_class_f1", {}).items():
-              lines.append(f"| {cls} | {val} |")
-
-          with open("compliance_artifacts/bias_report.md", "w") as f:
-              f.write("\n".join(lines))
-          PYEOF
-
-      - name: Ensure bias_report.json exists even on error
-        if: always()
-        run: |
-          mkdir -p compliance_artifacts
+          # Ensure fallback JSON exists if previous step failed
           if [ ! -f compliance_artifacts/bias_report.json ]; then
             echo '{"status":"ERROR","max_f1_disparity":"N/A","per_class_f1":{},"overall_accuracy":"N/A","threshold":0.10}' \
               > compliance_artifacts/bias_report.json
           fi
-          if [ ! -f compliance_artifacts/bias_report.md ]; then
-            echo "# Bias & Fairness Report\n\n**Status**: ERROR – report could not be generated." \
-              > compliance_artifacts/bias_report.md
-          fi
+          python3 - <<'PYEOF'
+import json, os
+
+with open("compliance_artifacts/bias_report.json") as f:
+    r = json.load(f)
+
+lines = [
+    "# Bias & Fairness Report",
+    "",
+    f"**Status**: {r['status']}  ",
+    f"**Max F1 Disparity**: {r['max_f1_disparity']} (Threshold: {r['threshold']})  ",
+    f"**Overall Accuracy**: {r['overall_accuracy']}",
+    "",
+    "## Per-Class F1 Scores",
+    "",
+    "| Class | F1-Score |",
+    "|-------|----------|",
+]
+for cls, val in r.get("per_class_f1", {}).items():
+    lines.append(f"| {cls} | {val} |")
+
+with open("compliance_artifacts/bias_report.md", "w") as f:
+    f.write("\n".join(lines))
+
+print("bias_report.md written successfully.")
+PYEOF
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -363,84 +367,95 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install scikit-learn numpy
+        run: pip install scikit-learn numpy joblib
 
-      - name: Train model and generate metrics
+      - name: Train model (using train.py)
         run: |
-          python - <<'PYEOF'
-          import json
-          from sklearn.datasets import load_iris
-          from sklearn.ensemble import RandomForestClassifier
-          from sklearn.model_selection import train_test_split
-          from sklearn.metrics import accuracy_score, classification_report
-          import numpy as np
+          mkdir -p model compliance_artifacts
+          python train.py
 
-          iris = load_iris()
-          X, y = iris.data, iris.target
-          X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+      - name: Generate metrics from trained model
+        run: |
+          mkdir -p compliance_artifacts
+          python3 - <<'PYEOF'
+import json, os
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+import joblib
 
-          model = RandomForestClassifier(n_estimators=100, random_state=42)
-          model.fit(X_train, y_train)
-          y_pred = model.predict(X_test)
+model = joblib.load("model/model.pkl")
+iris = load_iris()
+X, y = iris.data, iris.target
+_, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+y_pred = model.predict(X_test)
 
-          report = classification_report(y_test, y_pred, target_names=iris.target_names, output_dict=True)
-          importances = dict(zip(iris.feature_names, [round(float(v),4) for v in model.feature_importances_]))
+report = classification_report(y_test, y_pred, target_names=iris.target_names, output_dict=True)
+importances = dict(zip(iris.feature_names, [round(float(v), 4) for v in model.feature_importances_]))
 
-          metrics = {
-              "accuracy": round(accuracy_score(y_test, y_pred), 4),
-              "n_estimators": 100,
-              "feature_importances": importances,
-              "classification_report": report
-          }
-          import os; os.makedirs("compliance_artifacts", exist_ok=True)
-          with open("compliance_artifacts/metrics.json","w") as f:
-              json.dump(metrics, f, indent=2)
-          PYEOF
+metrics = {
+    "accuracy": round(accuracy_score(y_test, y_pred), 4),
+    "n_estimators": model.n_estimators,
+    "feature_importances": importances,
+    "classification_report": report
+}
+with open("compliance_artifacts/metrics.json", "w") as f:
+    json.dump(metrics, f, indent=2)
+print("Metrics written:", metrics["accuracy"])
+PYEOF
 
       - name: Generate model_card.md
         run: |
-          python - <<'PYEOF'
-          import json
-          with open("compliance_artifacts/metrics.json") as f:
-              m = json.load(f)
-          cr = m["classification_report"]
-          fi = m["feature_importances"]
+          python3 - <<'PYEOF'
+import json
+with open("compliance_artifacts/metrics.json") as f:
+    m = json.load(f)
+cr = m["classification_report"]
+fi = m["feature_importances"]
 
-          lines = [
-              "# Model Card – Applicant Scoring Model",
-              "\n## Model Details",
-              "- **Algorithm**: RandomForestClassifier (scikit-learn)",
-              f"- **Estimators**: {m['n_estimators']}",
-              "- **Version**: See VERSION_MANIFEST.json",
-              "\n## Intended Use",
-              "Proof-of-concept applicant scoring. Not for production use without further validation.",
-              "\n## Performance",
-              f"- **Overall Accuracy**: {m['accuracy']}",
-              "\n| Class | Precision | Recall | F1 |",
-              "|-------|-----------|--------|----|",
-          ]
-          for cls in ["setosa","versicolor","virginica"]:
-              r = cr.get(cls, {})
-              lines.append(f"| {cls} | {round(r.get('precision',0),4)} | {round(r.get('recall',0),4)} | {round(r.get('f1-score',0),4)} |")
+lines = [
+    "# Model Card - Applicant Scoring Model",
+    "",
+    "## Model Details",
+    "- **Algorithm**: RandomForestClassifier (scikit-learn)",
+    f"- **Estimators**: {m['n_estimators']}",
+    "- **Version**: See VERSION_MANIFEST.json",
+    "",
+    "## Intended Use",
+    "Proof-of-concept applicant scoring. Not for production use without further validation.",
+    "",
+    "## Performance",
+    f"- **Overall Accuracy**: {m['accuracy']}",
+    "",
+    "| Class | Precision | Recall | F1 |",
+    "|-------|-----------|--------|----|",
+]
+for cls in ["setosa", "versicolor", "virginica"]:
+    r = cr.get(cls, {})
+    lines.append(f"| {cls} | {round(r.get('precision',0),4)} | {round(r.get('recall',0),4)} | {round(r.get('f1-score',0),4)} |")
 
-          lines += [
-              "\n## Feature Importances",
-              "| Feature | Importance |",
-              "|---------|------------|",
-          ]
-          for feat, val in fi.items():
-              lines.append(f"| {feat} | {val} |")
+lines += [
+    "",
+    "## Feature Importances",
+    "| Feature | Importance |",
+    "|---------|------------|",
+]
+for feat, val in fi.items():
+    lines.append(f"| {feat} | {val} |")
 
-          lines += [
-              "\n## Limitations & Risks",
-              "- Trained on Iris dataset (synthetic proxy for applicant data).",
-              "- Fairness evaluation limited to class-level metrics.",
-              "\n_Generated automatically by CI pipeline._"
-          ]
+lines += [
+    "",
+    "## Limitations & Risks",
+    "- Trained on Iris dataset (synthetic proxy for applicant data).",
+    "- Fairness evaluation limited to class-level metrics.",
+    "",
+    "_Generated automatically by CI pipeline._"
+]
 
-          with open("compliance_artifacts/model_card.md","w") as f:
-              f.write("\n".join(lines))
-          PYEOF
+with open("compliance_artifacts/model_card.md", "w") as f:
+    f.write("\n".join(lines))
+print("model_card.md written.")
+PYEOF
 
       - name: Generate dataset_card.md
         run: |
