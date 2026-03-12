@@ -236,6 +236,19 @@ jobs:
               f.write("\n".join(lines))
           PYEOF
 
+      - name: Ensure bias_report.json exists even on error
+        if: always()
+        run: |
+          mkdir -p compliance_artifacts
+          if [ ! -f compliance_artifacts/bias_report.json ]; then
+            echo '{"status":"ERROR","max_f1_disparity":"N/A","per_class_f1":{},"overall_accuracy":"N/A","threshold":0.10}' \
+              > compliance_artifacts/bias_report.json
+          fi
+          if [ ! -f compliance_artifacts/bias_report.md ]; then
+            echo "# Bias & Fairness Report\n\n**Status**: ERROR – report could not be generated." \
+              > compliance_artifacts/bias_report.md
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -588,9 +601,14 @@ jobs:
       - name: Flatten artifacts into one folder
         run: |
           mkdir -p compliance_artifacts
-          find all_artifacts/ -type f | while read f; do
-            cp "$f" compliance_artifacts/ 2>/dev/null || true
+          find all_artifacts/ -type f -not -name "*.DS_Store" | while IFS= read -r f; do
+            fname="$(basename "$f")"
+            dest="compliance_artifacts/$fname"
+            cp "$f" "$dest"
+            echo "Copied: $fname"
           done
+          echo "--- Files in compliance_artifacts ---"
+          ls -1 compliance_artifacts/
 
       - name: Generate INTEGRITY_MANIFEST
         run: |
@@ -650,9 +668,13 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p compliance_artifacts
-          find all_artifacts/ -type f | while read f; do
-            cp "$f" compliance_artifacts/ 2>/dev/null || true
+          find all_artifacts/ -type f -not -name "*.DS_Store" | while IFS= read -r f; do
+            fname="$(basename "$f")"
+            cp "$f" "compliance_artifacts/$fname"
+            echo "Copied: $fname"
           done
+          echo "--- Files in compliance_artifacts ---"
+          ls -1 compliance_artifacts/
 
       - name: Generate COMPLIANCE_SUMMARY.md
         run: |
