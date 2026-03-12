@@ -4,3 +4,11 @@ on:
   push:
     branches:
       - main
+
+jobs:
+  setup:
+    name: Setup & Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
