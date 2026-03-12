@@ -427,4 +427,4 @@ jobs:
         with:
           name: stage10-compliance-summary
           path: ${ARTIFACT_DIR}/COMPLIANCE_SUMMARY.md
-``
+
